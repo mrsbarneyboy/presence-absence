@@ -99,3 +99,51 @@ head(wide_data)
 
 
 
+THIS WORKED
+
+library(dplyr)
+library(tidyr)
+
+# Step 1: Create all combinations of Bird.ID and week_number
+presence_matrix <- expand.grid(Bird.ID = unique(chick_data$Bird.ID),
+                               week_number = unique(combined_dates$week_number))
+
+# Step 2: Find the first appearance of each Bird.ID in chick_data
+first_appearance <- chick_data %>%
+  group_by(Bird.ID) %>%
+  summarise(first_week = min(week_number, na.rm = TRUE), .groups = "drop")
+
+# Step 3: Assign NA for weeks before first appearance, and 1 for presence
+presence_matrix <- presence_matrix %>%
+  left_join(first_appearance, by = "Bird.ID") %>%
+  mutate(value = ifelse(week_number < first_week, NA, 0))  # Default to 0
+
+# Step 4: Mark presence (1) when Bird.ID is in chick_data
+presence_matrix <- presence_matrix %>%
+  left_join(select(chick_data, Bird.ID, week_number) %>% mutate(present = 1),
+            by = c("Bird.ID", "week_number")) %>%
+  mutate(value = ifelse(!is.na(present), 1, value)) %>%
+  select(-present)
+
+# Step 5: Check if Bird.ID appears in Adult.1 or Adult.2 in adult_data
+adult_presence <- adult_data %>%
+  pivot_longer(cols = c(Adult.1, Adult.2), values_to = "Bird.ID") %>%
+  select(Bird.ID, week_number) %>%
+  distinct() %>%
+  mutate(adult_present = 1)
+
+# Step 6: Assign 1 if Bird.ID is found in Adult.1 or Adult.2, otherwise 0
+presence_matrix <- presence_matrix %>%
+  left_join(adult_presence, by = c("Bird.ID", "week_number")) %>%
+  mutate(value = ifelse(!is.na(adult_present), 1, value)) %>%
+  select(-adult_present)
+
+# Step 7: Reshape into a wide format
+presence_matrix_wide <- presence_matrix %>%
+  pivot_wider(names_from = week_number, values_from = value, values_fill = list(value = 0))
+
+# Print the final presence-absence matrix
+print(presence_matrix_wide)
+
+
+
